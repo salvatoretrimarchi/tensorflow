@@ -39,7 +39,7 @@ bazel test --config=rocm --test_tag_filters=-no_oss,-no_gpu,-benchmark-test -k \
     --test_lang_filters=py --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 \
     --build_tests_only --test_output=errors --local_test_jobs=1 \
     --run_under=//tensorflow/tools/ci_build/gpu_build:parallel_gpu_execute -- \
-    //tensorflow/... -//tensorflow/compiler/... -//tensorflow/contrib/...
+    //tensorflow/... -//tensorflow/compiler/... -//tensorflow/contrib/... \
     -//tensorflow/python/estimator:dnn_linear_combined_test \
     -//tensorflow/python/estimator:dnn_test \
     -//tensorflow/python/estimator:estimator_test \
