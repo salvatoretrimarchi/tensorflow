@@ -28,7 +28,7 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     rtg::convolution op;
     string data_format;
     TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "data_format", &data_format));
@@ -50,17 +50,17 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inp
     return Status::OK();
 }
 
-Status AddMaxPool(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddMaxPool(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddBiasAdd(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddBiasAdd(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     const auto& tensor = nodeDef.attr().at("value").tensor();
     auto& content = tensor.tensor_content();
     DataType dataType;
@@ -84,17 +84,17 @@ Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inpu
     return Status::OK();
 }
 
-Status AddIdentity(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddIdentity(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddActivation(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddActivation(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     ctx.instructions[nodeDef.name()] = ctx.program->add_instruction(rtg::activation{"relu"}, inputs);
     return Status::OK();
 }
 
-Status AddScale(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+Status AddScale(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_PTRS& inputs) {
     CHECK(false);
     return Status::OK();
 }
@@ -194,7 +194,7 @@ void Converter::add_parameter(const NodeDef& nodeDef)  {
 
 void Converter::add_instruction(const Node* node)  {
     OpConverter op_converter = op_registry_.at(node->type_string());
-    T_RTG_INST_V inputs;
+    T_RTG_INST_PTRS inputs;
     for (const Edge* edge : node->in_edges()) {
         if (edge->IsControlEdge())
             continue;
@@ -315,7 +315,7 @@ void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shap
         tensor_shape.AddDim(lens[i]);
 }
 
-void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
+void SetNameAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert)
 {
     string name = ins.op.name();
     int cnt = 0;
@@ -329,7 +329,7 @@ void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
     convert.rtgInsNames[&ins] = new_name;
 }
     
-void SetInputAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
+void SetInputAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert)
 {
     auto attr_map = attrs.mutable_attr();
     AttrValue value;
@@ -338,7 +338,7 @@ void SetInputAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert
     (*attr_map)["num_inputs"] = value;
     arg_cnt = 0;
     for (auto iter = ins.arguments.begin(), end = ins.arguments.end(); iter != end; iter++) {
-        rtg::instruction* arg = *iter;
+        T_RTG_INST* arg = *iter;
         string name = convert.rtgInsNames[arg];
         AttrValue value;
         SetAttrValue(name, &value);
@@ -348,12 +348,12 @@ void SetInputAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert
     }    
 }    
 
-void EncodeActivationAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeActivationAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
 }
     
-void EncodeParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeParamAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert) {
     rtg::shape shape = ins.result;
     string name = ins.op.name();
     attrs.set_name(name);
@@ -370,7 +370,7 @@ void EncodeParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& conv
     (*attr_map)["shape"] = s_value;
 }
 
-void EncodeConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeConstAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     rtg::shape shape = ins.result;
     DataType type = convert.getType(shape.type());
@@ -387,7 +387,7 @@ void EncodeConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& conv
     (*attr_map)["value"] = value;
 }
 
-void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeConvolutionAttr(T_RTG_INST& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
     // TODO: get stride, padding, dilation
@@ -402,7 +402,7 @@ void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter
 
 void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
     string name = func.name();
-    T_RTG_INST_V inputs;
+    T_RTG_INST_PTRS inputs;
     DecodeInputAttr(inputs, func, convert);
     convert->instructions[name] = convert->program->add_instruction(rtg::activation{"relu"}, inputs);    
 }
@@ -440,7 +440,7 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
 
 void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string& prefix) {
     string name = func.name();
-    T_RTG_INST_V inputs;
+    T_RTG_INST_PTRS inputs;
     DecodeInputAttr(inputs, func, convert);
 #if 0    
     auto map = func.attr();
@@ -465,7 +465,7 @@ void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefi
     convert->instructions[name] = convert->program->add_parameter(orig_name, shape);
 }
 
-void DecodeInputAttr(T_RTG_INST_V& inputs, const NameAttrList& func, Converter* convert)
+void DecodeInputAttr(T_RTG_INST_PTRS& inputs, const NameAttrList& func, Converter* convert)
 {
     auto map = func.attr();
     int32 num_of_inputs = map.at("num_inputs").i();
@@ -512,7 +512,7 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
     unsigned num_values = 0;
     AttrValue value;
     value.mutable_list()->Clear();
-    for (auto& ins : program->instructions) {
+    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
         num_values++;
         NameAttrList& attrs = *(value.mutable_list()->add_func());
         attrs.Clear();

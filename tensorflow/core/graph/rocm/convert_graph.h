@@ -23,6 +23,8 @@ limitations under the License.
 
 #include "rocm/include/rtg/program.hpp"
 
+#define GET_INSTS_FROM_PROGRAM(prog) (prog)->instructions
+
 namespace tensorflow {
 namespace rtglib {
 namespace convert {
@@ -45,12 +47,13 @@ struct Cluster {
      }
 };
 
-typedef std::vector<rtg::instruction*> T_RTG_INST_V; 
+typedef rtg::instruction T_RTG_INST;
+typedef std::vector<T_RTG_INST*> T_RTG_INST_PTRS; 
 typedef const std::vector<std::pair<string, Tensor>> T_INPUT_MAP; 
  
 class  Converter;
 using OpConverter =
-    std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&, const T_RTG_INST_V&)>;
+    std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&, const T_RTG_INST_PTRS&)>;
 
 using AttrEncoder=
     std::function<void(rtg::instruction&, NameAttrList&, Converter&)>;
@@ -104,13 +107,13 @@ struct Converter {
 const string Converter::prefix = "@";
 const string Converter::postfix = "@"; 
  
-Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddConst(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddConv2D(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddConst(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddConv2D(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
+Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_PTRS&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
 Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
 Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
@@ -123,7 +126,7 @@ void EncodeParamAttr(rtg::instruction&, NameAttrList&, Converter&);
 void DecodeActivationAttr(const NameAttrList&, Converter*, string&);
 void DecodeConstAttr(const NameAttrList&, Converter*, string&);
 void DecodeConvolutionAttr(const NameAttrList&, Converter*, string&);
-void DecodeInputAttr(T_RTG_INST_V& inputs, const NameAttrList& func, Converter* convert);
+void DecodeInputAttr(T_RTG_INST_PTRS& inputs, const NameAttrList& func, Converter* convert);
 void DecodeParamAttr(const NameAttrList&, Converter*, string&); 
  
 } // namspace convert
