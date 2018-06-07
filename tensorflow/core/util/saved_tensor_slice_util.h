@@ -171,11 +171,7 @@ inline void Fill(const Eigen::half* data, size_t n, TensorProto* t) {
   typename protobuf::RepeatedField<int32>* val = t->mutable_half_val();
   val->Resize(n, 0);
   for (size_t i = 0; i < n; ++i) {
-#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
-    val->Set(i, __half_as_ushort(data[i].x));
-#else
     val->Set(i, data[i].x);
-#endif
   }
 }
 
