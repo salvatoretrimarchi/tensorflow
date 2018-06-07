@@ -32,7 +32,8 @@ export PYTHON_BIN_PATH=`which python3`
 export TF_NEED_ROCM=1
 #export TF_CUDA_COMPUTE_CAPABILITIES=3.7
 
-yes "" | ./configure
+# Configure with all defaults, but disable XLA
+printf '\n\n\n\n\n\n\nN\n\n\n\n\n\n' | ./configure
 
 # Run bazel test command. Double test timeouts to avoid flakes.
 bazel test --config=rocm --test_tag_filters=-no_oss,-no_gpu,-benchmark-test -k \
