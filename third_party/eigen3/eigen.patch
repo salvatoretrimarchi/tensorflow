@@ -125,7 +125,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/MathFunctions.h eigen_a
    struct arg_impl {
      static inline Scalar run(const Scalar& x)
      {
-+      #ifdef __HCC__
++      #ifdef __HIPCC__
 +      using std::arg;
 +      #else
        EIGEN_USING_STD_MATH(arg);
@@ -2687,7 +2687,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/intrinsics
 +#ifndef INTRINSICS_H
 +#define INTRINSICS_H
 +
-+#ifdef __HCC__        // For HC backend
++#ifdef __HIPCC__        // For HC backend
 +    #define WARP_SIZE 64
 +#else                  // For NVCC backend
 +    #define WARP_SIZE 32
@@ -2837,7 +2837,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/intrinsics
 +/*------------------DUMMY SUPPORT FOR UNSUPPORTED INTRINSICS------------------*/
 +
 +//TODO: Replace them once supported by HC
-+#ifdef __HCC__        // For HC backend
++#ifdef __HIPCC__        // For HC backend
 +    #define __hip_threadfence() hc_barrier(CLK_LOCAL_MEM_FENCE)
 +    #define __hip_threadfence_block() hc_barrier(CLK_LOCAL_MEM_FENCE)
 +
@@ -4614,7 +4614,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +
 +#ifdef __NVCC__
 +    //TODO:setCudaSharedMemConfig(CudaSharedMemBankSizeEightByte);
-+#elif __HCC__
++#elif __HIPCC__
 +    setHipSharedMemConfig(hipSharedMemBankSizeEightByte);
 +#endif
 +    LaunchKernels<LhsScalar, RhsScalar, Index, LhsMapper, RhsMapper, OutputMapper>::Run(lhs, rhs, output,  m, n, k, this->m_device);
@@ -5225,13 +5225,13 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +#ifndef EIGEN_CXX11_TENSOR_TENSOR_REDUCTION_HIP_H
 +#define EIGEN_CXX11_TENSOR_TENSOR_REDUCTION_HIP_H
 +
-+#ifdef __HCC__
++#ifdef __HIPCC__
 +#include "Eigen/src/Core/arch/HIP/hcc/intrinsics.h"
 +#endif
 +
 +#ifdef __NVCC__
 +#define HIP_WARP_SIZE 32
-+#elif defined(__HCC__)
++#elif defined(__HIPCC__)
 +#define HIP_WARP_SIZE 64
 +#endif
 +
@@ -5304,7 +5304,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  unsigned long long int* address_as_ull = reinterpret_cast<unsigned long long int*>(address);
 +  #ifdef __NVCC__
 +  return __longlong_as_double(atomicExch(address_as_ull, __double_as_longlong(val)));
-+  #elif __HCC__
++  #elif __HIPCC__
 +  return __hip_longlong_as_double(atomicExch(address_as_ull, __hip_double_as_longlong(val)));
 +  #endif
 +}
