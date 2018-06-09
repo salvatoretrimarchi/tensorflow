@@ -107,6 +107,7 @@ tf_kernel_library(
         "strided_slice_op_gpu.cu.cc",
         "slice_op_gpu.cu.cc",
     ],
+    copts= ["-g", "-O0"],
     deps = [
         ":bounds_check",
         ":dense_update_functor",
@@ -456,6 +457,7 @@ cc_library(
     deps = [
         "//third_party/eigen3",
     ],
+    copts= ["-g", "-O0"],
 )
 
 cc_library(

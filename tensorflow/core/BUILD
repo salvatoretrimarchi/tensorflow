@@ -419,6 +419,7 @@ tf_gpu_library(
     }) + if_mkl([
         "util/mkl_util.h",
     ]),
+    copts = ["-g", "-O0", ],    
     visibility = ["//visibility:public"],
     deps = [":framework_internal"],
 )

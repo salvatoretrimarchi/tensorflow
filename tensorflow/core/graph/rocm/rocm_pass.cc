@@ -48,6 +48,13 @@ Status ROCmPass::Run(
     if (options.graph == nullptr && options.partition_graphs == nullptr) {
         return Status::OK();
     }
+    const char* enable_rtg = getenv("TF_ENABLE_RTG");
+    if (enable_rtg != nullptr) {
+        int env_val = atoi(enable_rtg);
+        if (env_val == 0)
+            return Status::OK();
+    }
+    
     auto convertGraph = [&](std::unique_ptr<Graph>* g) {
         // Get the ownership of a graph
         std::unique_ptr<Graph>* ng = std::move(g);
