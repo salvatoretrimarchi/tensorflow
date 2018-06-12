@@ -20,7 +20,7 @@ def filter_backends(backends):
   """
   if cuda_is_configured():
     return backends
-  else if rocm_is_configured():
+  elif rocm_is_configured():
     return backends
   else:
     return [backend for backend in backends if backend != "gpu"]
