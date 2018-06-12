@@ -102,14 +102,14 @@ https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/util/gpu_ke
 
 */
 
-#if GOOGLE_CUDA
+#if GOOGLE_CUDA || (TENSORFLOW_USE_ROCM && !__HCC__)
 #define GPU_LAUNCH_KERNEL(kernel, block_count, threads_per_block, \
                           shared_mem, stream, ...) \
-  kernel<<block_count, threads_per_block, shared_mem, stream>>>(__VA_ARGS__);
+  (kernel)<<<block_count, threads_per_block, shared_mem, stream>>>(__VA_ARGS__);
 #elif TENSORFLOW_USE_ROCM
 #define GPU_LAUNCH_KERNEL(kernel, block_count, threads_per_block, \
                           shared_mem, stream, ...) \
-  hipLaunchKernelGGL(kernel, \
+  hipLaunchKernelGGL((kernel), \
     block_count, threads_per_block, shared_mem, stream, \
     __VA_ARGS__);
 #endif
