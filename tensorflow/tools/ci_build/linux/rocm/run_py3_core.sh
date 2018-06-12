@@ -45,6 +45,7 @@ bazel test --config=rocm --test_tag_filters=-no_oss,-no_gpu,-benchmark-test -k \
     -//tensorflow/python/estimator:dnn_test \
     -//tensorflow/python/estimator:estimator_test \
     -//tensorflow/python/estimator:linear_test \
+    -//tensorflow/python/feature_column:feature_column_test \
     -//tensorflow/python/kernel_tests:atrous_conv2d_test \
     -//tensorflow/python/kernel_tests:batch_matmul_op_test \
     -//tensorflow/python/kernel_tests:cholesky_op_test \
