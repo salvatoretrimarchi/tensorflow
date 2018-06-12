@@ -35,11 +35,14 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "data_format", &data_format));
     int h_index = 2;
     int w_index = 3;
+    int filter_row_index = 2;
+    int filter_col_index = 3;
     if (ctx.starts_with(data_format, "NHWC")) {
         h_index = 1;
         w_index = 2;
-    } else if (ctx.starts_with(data_format, "NCHW")) {
-        CHECK(false) << "Unknown data format";
+        filter_row_index = 0;
+        filter_col_index = 1;
+        CHECK(false) << "todo: transpose input";
     }
     auto list = nodeDef.attr().at("strides").list();
     std::vector<int> strides;
@@ -51,7 +54,6 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     int count = 0;
     int input_rows, input_cols;
     int filter_rows, filter_cols;
-    // int batch_size, input_depth, filter_in_depth, filter_output_depth;
     Padding padding;
     TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "padding", &padding));
     
@@ -63,15 +65,12 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         if (count == 0) {
             // input
             // batch_size = tensor_shape.dim_size(0);
-            input_rows = tensor_shape.dim_size(1);
-            input_cols = tensor_shape.dim_size(2);
-            // input_depth = tensor_shape.dim_size(3);
+            input_rows = tensor_shape.dim_size(h_index);
+            input_cols = tensor_shape.dim_size(w_index);
         } else {
             // filter
-            filter_rows = tensor_shape.dim_size(0);
-            filter_cols = tensor_shape.dim_size(1);
-            // filter_in_depth = tensor_shape.dim_size(2);
-            // filter_output_depth = tensor_shape.dim_size(3);
+            filter_rows = tensor_shape.dim_size(filter_row_index);
+            filter_cols = tensor_shape.dim_size(filter_col_index);
         }
         count++;
     }
@@ -407,9 +406,7 @@ void EncodeActivationAttr(rtg::instruction& ins, NameAttrList& attrs, Converter&
     
 void EncodeParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     rtg::shape shape = ins.result;
-    string name = ins.op.name();
-    attrs.set_name(name);
-    convert.rtgInsNames[&ins] = name;
+    SetNameAttr(ins, attrs, convert);
     DataType type = convert.getType(shape.type());
     auto attr_map = attrs.mutable_attr();
     AttrValue t_value;
@@ -513,8 +510,7 @@ void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string&
 void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefix) {
     string name = func.name();
     const rtg::shape shape = convert->getAttrShape(func);
-    string orig_name = convert->substract_prefix(name, prefix);
-    convert->instructions[name] = convert->program->add_parameter(orig_name, shape);
+    convert->instructions[name] = convert->program->add_parameter(name, shape);
 }
 
 void DecodeInputAttr(T_RTG_INST_REFS& inputs, const NameAttrList& func, Converter* convert)

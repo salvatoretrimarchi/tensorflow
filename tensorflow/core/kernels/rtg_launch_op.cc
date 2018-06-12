@@ -18,7 +18,10 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/framework/node_def_util.h"
+#include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/types.h"
+#include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
 
@@ -42,6 +45,10 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     // Execute the computation.
     VLOG(2) << "Executing computation.";
 
+    const Tensor& input = ctx->input(0);
+    OP_REQUIRES(ctx, input.dims() == 4,
+                errors::InvalidArgument("input must be 4-dimensional",
+                                        input.shape().DebugString()));
 #if 0    
     auto start_time = env->NowMicros();
     auto run_result = executable->Run(arg_ptrs, run_options);
