@@ -107,7 +107,7 @@ void RdmaRemoteRendezvous::RecvFromRemoteAsync(
           CHECK(recv_args.device_context)
             << "send dev name: " << src_dev->name()
             << " gpu_info: " << src_dev->tensorflow_gpu_device_info();
-          Allocator* alloc = ProcessState::singleton()->GetCUDAHostAllocator(0);
+          Allocator* alloc = ProcessState::singleton()->GetROCMHostAllocator(0);
           Tensor copy(alloc, rm.data_type_, rm.tensor_shape_);
           memcpy(DMAHelper::base(&copy), input, rm.tensor_bytes_);
 

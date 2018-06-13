@@ -719,7 +719,7 @@ void RdmaTensorBuffer::SendNextItem() {
           AllocatorAttributes host_alloc_attrs;
           host_alloc_attrs.set_gpu_compatible(true);
           host_alloc_attrs.set_on_host(true);
-          Allocator* alloc = ProcessState::singleton()->GetCUDAHostAllocator(0);
+          Allocator* alloc = ProcessState::singleton()->GetROCMHostAllocator(0);
           copy = Tensor(alloc, in.dtype(), in.shape());
           s = VerbsUtil::CopyGPUTensorToCPUSync(
               src_dev, send_args.device_context, &in, &copy);
