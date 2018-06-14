@@ -44,11 +44,21 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
 
     // Execute the computation.
     VLOG(2) << "Executing computation.";
-
+    
     const Tensor& input = ctx->input(0);
     OP_REQUIRES(ctx, input.dims() == 4,
                 errors::InvalidArgument("input must be 4-dimensional",
                                         input.shape().DebugString()));
+    rtglib::convert::AddInput(program, input);
+    OP_REQUIRES(ctx, ctx->num_outputs() == 1,
+                errors::InvalidArgument("expect single output"));
+    
+    TensorShape output_shape;
+    rtglib::convert::GetOutputShape(program, output_shape);
+    Tensor* output = nullptr;
+    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
+    rtglib::convert::EvalProgram(program, input);
+    
 #if 0    
     auto start_time = env->NowMicros();
     auto run_result = executable->Run(arg_ptrs, run_options);
@@ -116,7 +126,9 @@ RTGLaunchOp::~RTGLaunchOp() {
   VLOG(1) << "RTGLaunchOp destroyed";
 }
 
-REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_GPU), RTGLaunchOp);
+//TODO: back to GPU
+//REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_GPU), RTGLaunchOp);
+REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_CPU), RTGLaunchOp);    
 
 }  // namespace tensorflow
 

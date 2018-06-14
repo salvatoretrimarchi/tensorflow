@@ -42,7 +42,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         w_index = 2;
         filter_row_index = 0;
         filter_col_index = 1;
-        CHECK(false) << "todo: transpose input";
+        CHECK(false) << "TODO: transpose input";
     }
     auto list = nodeDef.attr().at("strides").list();
     std::vector<int> strides;
@@ -366,6 +366,33 @@ void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shap
         tensor_shape.AddDim(lens[i]);
 }
 
+void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li)
+{
+    const TensorShapeProto& tensor_shape = tensor.tensor_shape();
+    auto& content = tensor.tensor_content();
+    DataType data_type = tensor.dtype();
+    std::vector<std::size_t> dims;
+    for (const auto& dim_proto : tensor_shape.dim()) {
+        int size = dim_proto.size();
+        dims.push_back(size);
+    }
+    rtg::shape::type_t shape_type = getShapeType(data_type);
+    rtg::shape shape = {shape_type, dims};
+    switch (data_type) {
+    case DT_FLOAT:{
+        const float * ptr = reinterpret_cast<const float*>(content.data());
+        int size = content.size()/sizeof(float);
+        std::vector<float> data;
+        for (int i = 0; i < size; i++)
+            data.push_back(ptr[i]);
+        li = rtg::literal{shape, data.begin(), data.end()};
+        break;
+    }
+    default:
+        CHECK(false) << "unknown data type";
+    }
+}
+
 void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
 {
     string name = ins.op.name();
@@ -460,30 +487,8 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
     string name = func.name();
     auto map = func.attr();
     const auto& tensor = map.at("value").tensor();
-    const TensorShapeProto& tensor_shape = tensor.tensor_shape();
-    auto& content = tensor.tensor_content();
-    DataType data_type = tensor.dtype();
-    std::vector<std::size_t> dims;
-    for (const auto& dim_proto : tensor_shape.dim()) {
-        int size = dim_proto.size();
-        dims.push_back(size);
-    }
-    rtg::shape::type_t shape_type = convert->getShapeType(data_type);
-    rtg::shape shape = {shape_type, dims};
     rtg::literal li;
-    switch (data_type) {
-    case DT_FLOAT:{
-        const float * ptr = reinterpret_cast<const float*>(content.data());
-        int size = content.size()/sizeof(float);
-        std::vector<float> data;
-        for (int i = 0; i < size; i++)
-            data.push_back(ptr[i]);
-        li = rtg::literal{shape, data.begin(), data.end()};
-        break;
-    }
-    default:
-        CHECK(false) << "unknown data type";
-    }
+    convert->getLiteralFromTensor(tensor, li);
     convert->instructions[name] = convert->program->add_literal(li);
 }
 
@@ -547,7 +552,7 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
         if (edge->IsControlEdge())
             continue;
         Node* src = edge->src();
-        CHECK(!src->IsConstant()) << "todo: constant is exit node";
+        CHECK(!src->IsConstant()) << "TODO: constant is exit node";
         Node* dst = edge->dst();
         int dest_port = edge->dst_input();
         DataType data_type = dst->input_type(dest_port);
@@ -651,10 +656,13 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
         return errors::Internal("Fail to create RTG program");
 
     Converter fwd_convert(program, inputs);
+    string param_device;
     for (const Edge* edge : cluster.input_edges) {
         if (edge->IsControlEdge())
             continue;
-        fwd_convert.add_parameter(edge->src()->def());
+        Node* src = edge->src();
+        param_device = src->assigned_device_name();
+        fwd_convert.add_parameter(src->def());
     }
 
     string cluster_name;
@@ -667,7 +675,12 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     std::cout << *program << std::endl;
     // call program->compile()
     Converter bwd_convert(program, nullptr);
+    // TODO: use gpu
+#if 0    
     bwd_convert.device = device;
+#else
+    bwd_convert.device = param_device;
+#endif
     TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
     delete program;

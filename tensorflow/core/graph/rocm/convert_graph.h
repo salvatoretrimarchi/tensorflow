@@ -24,6 +24,7 @@ limitations under the License.
 #include "rocm/include/rtg/instruction.hpp"
 #include "rocm/include/rtg/program.hpp"
 
+
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()
 
 namespace tensorflow {
@@ -77,6 +78,7 @@ struct Converter {
     rtg::shape::type_t getShapeType(const DataType&);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
+    void getLiteralFromTensor(const TensorProto&, rtg::literal&);
     std::unordered_map<string, OpConverter> op_registry_;
     std::unordered_map<string, AttrEncoder> attr_encoder_registry_;
     std::unordered_map<string, AttrDecoder> attr_decoder_registry_;
