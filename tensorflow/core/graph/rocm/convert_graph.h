@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "rocm/include/rtg/instruction.hpp"
 #include "rocm/include/rtg/program.hpp"
+#include "rocm/include/rtg/operators.hpp"
 
 
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()
@@ -78,7 +79,7 @@ struct Converter {
     rtg::shape::type_t getShapeType(const DataType&);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
-    void getLiteralFromTensor(const TensorProto&, rtg::literal&);
+    void getLiteralFromTensor(const TensorProto&, rtg::literal&, bool);
     std::unordered_map<string, OpConverter> op_registry_;
     std::unordered_map<string, AttrEncoder> attr_encoder_registry_;
     std::unordered_map<string, AttrDecoder> attr_decoder_registry_;
@@ -104,11 +105,15 @@ struct Converter {
     T_INPUT_MAP* inputs;
     static const string prefix;
     static const string postfix;
+    static const string param_prefix;
+    static const string literal_prefix;
     string device;
 };
 
 const string Converter::prefix = "@";
-const string Converter::postfix = "@"; 
+const string Converter::postfix = "@";
+const string Converter::param_prefix = "@param";
+const string Converter::literal_prefix = "@literal"; 
  
 Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_REFS&);

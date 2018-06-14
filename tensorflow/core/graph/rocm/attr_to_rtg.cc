@@ -37,10 +37,20 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
     *p_program = program;
 }
 
-void EvalProgram(void* p_program, const Tensor& input)
+void EvalProgram(void* p_program, std::vector<string>& param_names)
 {
-    
-
+    rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
+    std::unordered_map<string, rtg::argument> params;
+    int size = param_names.size();
+    int count = 0;
+    Converter convert(program, nullptr);
+    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
+        CHECK(convert.starts_with(ins.op.name(), Converter::literal_prefix)) << "Expect literals";
+        params[param_names[count]] = ins.lit.get_argument();
+        if (++count == size)
+            break;
+    }
+    rtg::literal li = program->eval(params);
 }
 
 void GetOutputShape(void * p_program, TensorShape& ret_shape)
@@ -59,8 +69,25 @@ void AddInput(void * p_program, const Tensor& input)
     TensorProto tensor_proto;
     input.AsProtoTensorContent(&tensor_proto);
     rtg::literal li;
-    convert.getLiteralFromTensor(tensor_proto, li);
-    
+    convert.getLiteralFromTensor(tensor_proto, li, true);
+    T_RTG_INST_REF ins = program->get_first_instruction();
+    T_RTG_INST_REF new_ins = program->insert_literal(ins, li);
+    CHECK(program->get_first_instruction() == new_ins) << "insert error";
+}
+
+void GetParamNames(void* p_program,  std::vector<string>& param_names)
+{
+    rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
+    Converter convert(program, nullptr);
+    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
+        string name = ins.op.name();
+        if (convert.starts_with(name, Converter::param_prefix)) {
+            name = rtg::any_cast<rtg::builtin::param>(ins.op).parameter;
+            param_names.push_back(name);
+        } else {
+            break;
+        }
+    }
 }
 
 } // namspace convert

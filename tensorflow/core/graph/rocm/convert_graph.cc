@@ -17,7 +17,6 @@ limitations under the License.
 
 #include "convert_graph.h"
 #include "dump_graph.h"
-#include "rocm/include/rtg/operators.hpp"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
 #include <stack>
@@ -366,7 +365,7 @@ void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shap
         tensor_shape.AddDim(lens[i]);
 }
 
-void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li)
+void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li, bool reuse_memory)
 {
     const TensorShapeProto& tensor_shape = tensor.tensor_shape();
     auto& content = tensor.tensor_content();
@@ -380,12 +379,17 @@ void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li
     rtg::shape shape = {shape_type, dims};
     switch (data_type) {
     case DT_FLOAT:{
-        const float * ptr = reinterpret_cast<const float*>(content.data());
-        int size = content.size()/sizeof(float);
-        std::vector<float> data;
-        for (int i = 0; i < size; i++)
-            data.push_back(ptr[i]);
-        li = rtg::literal{shape, data.begin(), data.end()};
+        if (!reuse_memory) {
+            const float * ptr = reinterpret_cast<const float*>(content.data());
+            int size = content.size()/sizeof(float);
+            std::vector<float> data;
+            for (int i = 0; i < size; i++)
+                data.push_back(ptr[i]);
+            li = rtg::literal{shape, data.begin(), data.end()};
+        } else {
+            const char * ptr = reinterpret_cast<const char*>(content.data());
+            li = rtg::literal(shape, ptr);
+        }
         break;
     }
     default:
@@ -488,7 +492,7 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
     auto map = func.attr();
     const auto& tensor = map.at("value").tensor();
     rtg::literal li;
-    convert->getLiteralFromTensor(tensor, li);
+    convert->getLiteralFromTensor(tensor, li, false);
     convert->instructions[name] = convert->program->add_literal(li);
 }
 

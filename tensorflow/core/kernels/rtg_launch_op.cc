@@ -44,12 +44,17 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
 
     // Execute the computation.
     VLOG(2) << "Executing computation.";
+
+    std::vector<string> param_names;
+    rtglib::convert::GetParamNames(program, param_names);
+    unsigned input_size = ctx->num_inputs();
+    OP_REQUIRES(ctx, input_size == param_names.size(),
+                errors::InvalidArgument("unmatched parameters and inputs"));
     
-    const Tensor& input = ctx->input(0);
-    OP_REQUIRES(ctx, input.dims() == 4,
-                errors::InvalidArgument("input must be 4-dimensional",
-                                        input.shape().DebugString()));
-    rtglib::convert::AddInput(program, input);
+    for (int i = input_size - 1; i >= 0; --i) {
+        const Tensor& input = ctx->input(i);
+        rtglib::convert::AddInput(program, input);
+    }
     OP_REQUIRES(ctx, ctx->num_outputs() == 1,
                 errors::InvalidArgument("expect single output"));
     
@@ -57,7 +62,7 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     rtglib::convert::GetOutputShape(program, output_shape);
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    rtglib::convert::EvalProgram(program, input);
+    rtglib::convert::EvalProgram(program, param_names);
     
 #if 0    
     auto start_time = env->NowMicros();
