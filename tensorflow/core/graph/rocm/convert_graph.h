@@ -24,6 +24,7 @@ limitations under the License.
 #include "rocm/include/rtg/instruction.hpp"
 #include "rocm/include/rtg/program.hpp"
 #include "rocm/include/rtg/operators.hpp"
+#include "rocm/include/rtg/cpu/cpu_target.hpp"
 
 
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()

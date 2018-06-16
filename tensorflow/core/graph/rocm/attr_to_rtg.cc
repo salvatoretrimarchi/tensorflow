@@ -50,7 +50,8 @@ void EvalProgram(void* p_program, std::vector<string>& param_names)
         if (++count == size)
             break;
     }
-    rtg::literal li = program->eval(params);
+    program->compile(rtg::cpu::cpu_target{});
+    rtg::argument arg = program->eval(params);
 }
 
 void GetOutputShape(void * p_program, TensorShape& ret_shape)
