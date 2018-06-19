@@ -43,6 +43,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         filter_col_index = 1;
         CHECK(false) << "TODO: transpose input";
     }
+    
     auto list = nodeDef.attr().at("strides").list();
     std::vector<int> strides;
     int stride_rows = list.i(h_index);
@@ -50,11 +51,20 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     strides.push_back(stride_rows);
     strides.push_back(stride_cols);
     std::copy(strides.begin(), strides.end(), op.stride.begin());
+
     int count = 0;
     int input_rows, input_cols;
     int filter_rows, filter_cols;
     Padding padding;
     TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "padding", &padding));
+    switch (padding) {
+    case Padding::VALID:
+        op.padding_mode = rtg::convolution::valid;
+        break;
+    case Padding::SAME:
+        op.padding_mode = rtg::convolution::same;
+        break;
+    };
     
     for (auto iter = inputs.begin(), end = inputs.end(); iter != end; iter++) {
         T_RTG_INST_REF ins = *iter;
@@ -85,8 +95,15 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     paddings.push_back(pad_cols);
     std::copy(paddings.begin(), paddings.end(), op.padding.begin());
 
-    // TODO: dilations.
-    ctx.instructions[nodeDef.name()] = ctx.program->add_instruction(op, inputs);
+    if (nodeDef.attr().find("dilations") != nodeDef.attr().end()) {
+        auto list = nodeDef.attr().at("dilations").list();
+        std::vector<int> dilations;
+        for (int i = 0; i < list.i_size(); ++i)
+            dilations.push_back(list.i(i));
+        std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
+    }
+    T_RTG_INST_REF ins = ctx.program->add_instruction(op, inputs);
+    ctx.instructions[nodeDef.name()] = ins;
     return Status::OK();
 }
 
@@ -470,14 +487,29 @@ void EncodeConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& conv
 void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
-    // TODO: get stride, padding, dilation
-#if 0    
-    std::vector<int64> strides;
-    rtg::convolution op = ins.op;
+    rtg::convolution op = rtg::any_cast<rtg::convolution>(ins.op);
+    auto* attr_map = attrs.mutable_attr();
+    std::vector<int> strides;
     for (auto iter = op.stride.begin(); iter != op.stride.end(); ++iter)
         strides.push_back(*iter);
-#endif
-    tensorflow::gtl::ArraySlice<int64> value;
+    SetAttrValue(strides, &(*attr_map)["strides"]);
+    std::vector<int> paddings;
+    for (auto iter = op.padding.begin(); iter != op.padding.end(); ++iter)
+        paddings.push_back(*iter);
+    SetAttrValue(paddings, &(*attr_map)["paddings"]);
+    std::vector<int> dilations;
+    for (auto iter = op.dilation.begin(); iter != op.dilation.end(); ++iter)
+        dilations.push_back(*iter);
+    SetAttrValue(dilations, &(*attr_map)["dilations"]);
+    switch(op.padding_mode) {
+    case rtg::convolution::same:
+        SetAttrValue("SAME", &(*attr_map)["padding"]);
+        break;
+    case rtg::convolution::valid:
+        SetAttrValue("VALID", &(*attr_map)["padding"]);
+    default:
+        ;
+    }
 }
 
 void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
@@ -500,19 +532,30 @@ void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string&
     string name = func.name();
     T_RTG_INST_REFS inputs;
     DecodeInputAttr(inputs, func, convert);
-#if 0    
     auto map = func.attr();
-    int32 num_of_inputs = map.at("num_inputs").i();
-    
-    for (int i = 0; i < num_of_inputs; ++i) {
-        string input_name = "input" + std::to_string(i);
-        string arg_name = map.at(input_name).s();
-        CHECK(convert->instructions.find(arg_name) != convert->instructions.end()) << "Input no found";
-        inputs.push_back(convert->instructions[arg_name]);
-    }
-#endif    
     rtg::convolution op;
-    // get padding, strides, dilations.
+    const auto& list_s = map.at("strides").list();
+    std::vector<int> strides;
+    for (int i = 0; i < list_s.i_size(); ++i)
+        strides.push_back(list_s.i(i));
+    std::copy(strides.begin(), strides.end(), op.stride.begin());
+    
+    const auto& list_p = map.at("paddings").list();
+    std::vector<int> paddings;
+    for (int i = 0; i < list_p.i_size(); ++i)
+        paddings.push_back(list_p.i(i));
+    std::copy(paddings.begin(), paddings.end(), op.padding.begin());
+
+    const auto& list_d = map.at("dilations").list();
+    std::vector<int> dilations;
+    for (int i = 0; i < list_d.i_size(); ++i)
+        dilations.push_back(list_d.i(i));
+    std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
+    const string& padding = map.at("padding").s();
+    if (padding == "SAME")
+        op.padding_mode = rtg::convolution::same;
+    else if (padding == "VALID")
+        op.padding_mode = rtg::convolution::valid;
     convert->instructions[name] = convert->program->add_instruction(op, inputs);
 }
 
