@@ -62,7 +62,8 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     rtglib::convert::GetOutputShape(program, output_shape);
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    rtglib::convert::EvalProgram(program, param_names);
+    rtglib::convert::EvalProgram(program, param_names, output);
+    ctx->set_output(0, *output);
     
 #if 0    
     auto start_time = env->NowMicros();
@@ -71,58 +72,29 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     output = std::move(run_result.ValueOrDie());
     auto elapsed = env->NowMicros() - start_time;
     VLOG(2) << "Elapsed time: " << elapsed << "us";
-
-    // Computation output should always be a tuple.
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "Result tuple shape: " << output->shape().DebugString();
+    int output_num = 0;
+    for (int i = 0; i < ctx->num_outputs(); ++i) {
+        if (kernel->outputs[i].is_constant) {
+            // Output is a constant
+            const Tensor& const_tensor = kernel->outputs[i].constant_value;
+            const size_t total_bytes = const_tensor.TotalBytes();
+            if (stream && total_bytes > 0) {
+                // Copy host -> device. (Empty tensors don't have backing buffers.)
+                VLOG(1) << "Constant output tensor on device";
+                Tensor* output_tensor;
+                TF_CHECK_OK(
+                            ctx->allocate_output(i, const_tensor.shape(), &output_tensor));
+                
+                const void* src_ptr = DMAHelper::base(&const_tensor);
+                void* dst_ptr = DMAHelper::base(output_tensor);
+                gpu::DeviceMemoryBase gpu_dst_ptr(dst_ptr, total_bytes);
+                stream->ThenMemcpy(&gpu_dst_ptr, src_ptr, total_bytes);
+            } else {
+                // No copy required.
+                ctx->set_output(i, const_tensor);
+            }
+        }
     }
-
-  // Copy XLA results to the OpOutputList.
-  int output_num = 0;
-  for (int i = 0; i < ctx->num_outputs(); ++i) {
-    if (kernel->outputs[i].is_constant) {
-      // Output is a constant
-      const Tensor& const_tensor = kernel->outputs[i].constant_value;
-      const size_t total_bytes = const_tensor.TotalBytes();
-      if (stream && total_bytes > 0) {
-        // Copy host -> device. (Empty tensors don't have backing buffers.)
-        VLOG(1) << "Constant output tensor on device";
-        Tensor* output_tensor;
-        TF_CHECK_OK(
-            ctx->allocate_output(i, const_tensor.shape(), &output_tensor));
-
-        const void* src_ptr = DMAHelper::base(&const_tensor);
-        void* dst_ptr = DMAHelper::base(output_tensor);
-        gpu::DeviceMemoryBase gpu_dst_ptr(dst_ptr, total_bytes);
-        stream->ThenMemcpy(&gpu_dst_ptr, src_ptr, total_bytes);
-      } else {
-        // No copy required.
-        ctx->set_output(i, const_tensor);
-      }
-    } else {
-      const TensorShape& shape = kernel->outputs[i].shape;
-      VLOG(2) << "Retval " << i << " shape " << shape.DebugString();
-
-      gpu::DeviceMemoryBase buffer;
-      if (output_is_tuple) {
-        buffer = output->buffer({output_num});
-      } else {
-        CHECK_EQ(0, output_num);
-        buffer = output->buffer({});
-      }
-      Tensor output_tensor;
-      // Looks up the owning Tensor by buffer address.
-      OP_REQUIRES_OK(ctx, xla_allocator.MakeTensorFromBuffer(
-                              buffer, ctx->expected_output_dtype(i), shape,
-                              &output_tensor));
-      ctx->set_output(i, output_tensor);
-      ++output_num;
-    }
-
-    if (VLOG_IS_ON(3)) {
-      VLOG(3) << ctx->mutable_output(i)->DebugString();
-    }
-  }
 #endif
   VLOG(1) << "Done";
 }

@@ -25,7 +25,7 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 void GetProgram(const NameAttrList&, void **);
-void EvalProgram(void*, std::vector<string>&);
+void EvalProgram(void*, std::vector<string>&, Tensor*);
 void GetOutputShape(void *, TensorShape&);
 void AddInput(void *, const Tensor&);
 void GetParamNames(void*,  std::vector<string>&);

@@ -37,7 +37,7 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
     *p_program = program;
 }
 
-void EvalProgram(void* p_program, std::vector<string>& param_names)
+void EvalProgram(void* p_program, std::vector<string>& param_names, Tensor* output)
 {
     rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
     std::unordered_map<string, rtg::argument> params;
@@ -52,6 +52,13 @@ void EvalProgram(void* p_program, std::vector<string>& param_names)
     }
     program->compile(rtg::cpu::cpu_target{});
     rtg::argument arg = program->eval(params);
+    const TensorShape dst_shape = output->shape();
+    const rtg::shape arg_shape = arg.get_shape();
+    TensorShape src_shape;
+    convert.getTensorShape(arg_shape, src_shape);
+    CHECK(src_shape.IsSameSize(dst_shape));
+    memcpy(const_cast<char*> (output->tensor_data().data()),
+           arg.cast<char>(), arg_shape.bytes());
 }
 
 void GetOutputShape(void * p_program, TensorShape& ret_shape)
