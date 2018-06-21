@@ -132,9 +132,13 @@ void EncodeActivationAttr(rtg::instruction&, NameAttrList&, Converter&);
 void EncodeConstAttr(rtg::instruction&, NameAttrList&, Converter&); 
 void EncodeConvolutionAttr(rtg::instruction&, NameAttrList&, Converter&);
 void EncodeParamAttr(rtg::instruction&, NameAttrList&, Converter&);
+void EncodeTransposeAttr(rtg::instruction&, NameAttrList&, Converter&);
+void EncodeContiguousAttr(rtg::instruction&, NameAttrList&, Converter&); 
 void DecodeActivationAttr(const NameAttrList&, Converter*, string&);
 void DecodeConstAttr(const NameAttrList&, Converter*, string&);
 void DecodeConvolutionAttr(const NameAttrList&, Converter*, string&);
+void DecodeTransposeAttr(const NameAttrList&, Converter*, string&);
+void DecodeContiguousAttr(const NameAttrList&, Converter*, string&); 
 void DecodeInputAttr(T_RTG_INST_REFS& inputs, const NameAttrList& func, Converter* convert);
 void DecodeParamAttr(const NameAttrList&, Converter*, string&); 
  

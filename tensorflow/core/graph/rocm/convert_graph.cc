@@ -34,14 +34,13 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "data_format", &data_format));
     int h_index = 2;
     int w_index = 3;
-    int filter_row_index = 2;
-    int filter_col_index = 3;
+    int filter_row_index = 0;
+    int filter_col_index = 1;
+    bool addTranspose = false;
     if (ctx.starts_with(data_format, "NHWC")) {
         h_index = 1;
         w_index = 2;
-        filter_row_index = 0;
-        filter_col_index = 1;
-        CHECK(false) << "TODO: transpose input";
+        addTranspose = true;
     }
     
     auto list = nodeDef.attr().at("strides").list();
@@ -65,7 +64,8 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         op.padding_mode = rtg::convolution::same;
         break;
     };
-    
+
+    T_RTG_INST_REFS new_inputs;
     for (auto iter = inputs.begin(), end = inputs.end(); iter != end; iter++) {
         T_RTG_INST_REF ins = *iter;
         rtg::shape shape = ins->result;
@@ -81,6 +81,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
             filter_rows = tensor_shape.dim_size(filter_row_index);
             filter_cols = tensor_shape.dim_size(filter_col_index);
         }
+        new_inputs.push_back(ins);
         count++;
     }
     int64 out_rows = 0, out_cols = 0, pad_rows = 0, pad_cols = 0;
@@ -102,8 +103,19 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
             dilations.push_back(list.i(i));
         std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
     }
-    T_RTG_INST_REF ins = ctx.program->add_instruction(op, inputs);
-    ctx.instructions[nodeDef.name()] = ins;
+
+    T_RTG_INST_REF new_ins;
+    if (addTranspose) {
+        const T_RTG_INST_REF ins = inputs[0];
+        std::vector<int64_t> perm = {0, 3, 1, 2};
+        auto result1 = ctx.program->add_instruction(rtg::transpose{perm}, ins);
+        auto result2 = ctx.program->add_instruction(rtg::contiguous{}, result1);
+        new_inputs[0] = result2;
+        new_ins = ctx.program->add_instruction(op, new_inputs);
+    } else {
+        new_ins = ctx.program->add_instruction(op, inputs);
+    }
+    ctx.instructions[nodeDef.name()] = new_ins;
     return Status::OK();
 }
 
@@ -172,6 +184,8 @@ void Converter::register_attr_encoders() {
     attr_encoder_registry_["@literal"] = EncodeConstAttr;
     attr_encoder_registry_["convolution"] = EncodeConvolutionAttr;
     attr_encoder_registry_["activation"] = EncodeActivationAttr;
+    attr_encoder_registry_["transpose"] = EncodeTransposeAttr;
+    attr_encoder_registry_["contiguous"] = EncodeContiguousAttr;
 }
 
 void Converter::register_attr_decoders() {
@@ -179,6 +193,8 @@ void Converter::register_attr_decoders() {
     attr_decoder_registry_["@literal"] = DecodeConstAttr;
     attr_decoder_registry_["convolution"] = DecodeConvolutionAttr;
     attr_decoder_registry_["activation"] = DecodeActivationAttr;
+    attr_decoder_registry_["transpose"] = DecodeTransposeAttr;
+    attr_decoder_registry_["contiguous"] = DecodeContiguousAttr;
 }
     
 bool Converter::starts_with(const string& value, const string& prefix)
@@ -512,6 +528,22 @@ void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter
     }
 }
 
+void EncodeTransposeAttr(rtg::instruction& ins, NameAttrList& attr, Converter& convert) {
+    SetNameAttr(ins, attr, convert);
+    SetInputAttr(ins, attr, convert);
+    rtg::transpose op = rtg::any_cast<rtg::transpose>(ins.op);
+    auto* attr_map = attr.mutable_attr();
+    std::vector<int> dims;
+    for (auto iter = op.dims.begin(); iter != op.dims.end(); ++iter)
+        dims.push_back(*iter);
+    SetAttrValue(dims, &(*attr_map)["permutation"]);
+}
+
+void EncodeContiguousAttr(rtg::instruction& ins, NameAttrList& attr, Converter& convert) {
+    SetNameAttr(ins, attr, convert);
+    SetInputAttr(ins, attr, convert);
+}
+    
 void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
     string name = func.name();
     T_RTG_INST_REFS inputs;
@@ -552,11 +584,32 @@ void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string&
         dilations.push_back(list_d.i(i));
     std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
     const string& padding = map.at("padding").s();
-    if (padding == "SAME")
+    if (padding == "SAME") {
         op.padding_mode = rtg::convolution::same;
-    else if (padding == "VALID")
+    }
+    else if (padding == "VALID") {
         op.padding_mode = rtg::convolution::valid;
+    }
     convert->instructions[name] = convert->program->add_instruction(op, inputs);
+}
+
+void DecodeTransposeAttr(const NameAttrList& func, Converter* convert, string& prefix) {
+    string name = func.name();
+    T_RTG_INST_REFS inputs;
+    DecodeInputAttr(inputs, func, convert);
+    auto map = func.attr();
+    std::vector<int64_t> perm;
+    const auto& list = map.at("permutation").list();
+    for (int i = 0; i < list.i_size(); ++i)
+        perm.push_back(list.i(i));
+    convert->instructions[name] = convert->program->add_instruction(rtg::transpose{perm}, inputs);
+}
+
+void DecodeContiguousAttr(const NameAttrList& func, Converter* convert, string& prefix) {
+    string name = func.name();
+    T_RTG_INST_REFS inputs;
+    DecodeInputAttr(inputs, func, convert);
+    convert->instructions[name] = convert->program->add_instruction(rtg::contiguous{}, inputs);
 }
 
 void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefix) {
