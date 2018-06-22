@@ -33,7 +33,12 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-#define MIN_CLUSTER_SIZE 3    
+#define MIN_CLUSTER_SIZE 3
+
+typedef enum {
+    is_entry = 0,
+    is_exit
+} NodeMask;    
 
 struct Cluster {
      explicit Cluster() { init(); }
@@ -71,10 +76,11 @@ struct Converter {
     }
     bool isCandidate(const Node*);
     bool isRegistered(const Node*);
-    void add_instruction(const Node*);
+    void add_instruction(const Node*, bool);
     void add_parameter(const NodeDef&);
     void decodeAttr(const NameAttrList&);
     void getNodeType(const NodeDef&, DataType*);
+    bool getNCHWFormat(const T_RTG_INST_REFS&);
     rtg::shape getNodeShape(const NodeDef&, DataType* p_dtype = nullptr);
     rtg::shape getAttrShape(const NameAttrList&);
     rtg::shape::type_t getShapeType(const DataType&);
@@ -91,6 +97,7 @@ struct Converter {
         instructions.clear();
         rtgInsNames.clear();
         rtgInsCnt.clear();
+        rtgInsOutputFormat.clear();
     }
     string lookupEncoder(const string);
     string lookupDecoder(const string);
@@ -101,6 +108,7 @@ struct Converter {
     string substract_prefix(const string&, const string&);
     std::unordered_map<string, T_RTG_INST_REF> instructions;
     std::unordered_map<rtg::instruction*, string> rtgInsNames;
+    std::unordered_map<rtg::instruction*, string> rtgInsOutputFormat;
     std::unordered_map<string, int> rtgInsCnt;
     rtg::program* program;
     T_INPUT_MAP* inputs;
@@ -124,7 +132,7 @@ Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
-Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
+Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*, std::unordered_map<int, unsigned>&);
 Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
 void SetInputAttr(rtg::instruction&, NameAttrList&, Converter&);
 void SetNameAttr(rtg::instruction&, NameAttrList&, Converter&); 

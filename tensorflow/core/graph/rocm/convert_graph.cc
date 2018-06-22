@@ -37,10 +37,17 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     int filter_row_index = 0;
     int filter_col_index = 1;
     bool addTranspose = false;
+    // MIGraph use "NCHW" as default.
     if (ctx.starts_with(data_format, "NHWC")) {
         h_index = 1;
         w_index = 2;
-        addTranspose = true;
+        T_RTG_INST_REF input0 = inputs[0];
+        rtg::instruction* ptr = &(*input0);
+        if (ctx.rtgInsOutputFormat.find(ptr) == ctx.rtgInsOutputFormat.end()) {
+            addTranspose = true;
+        } else {
+            CHECK(ctx.rtgInsOutputFormat[ptr] == "NCHW") << "unexpected input format";
+        }
     }
     
     auto list = nodeDef.attr().at("strides").list();
@@ -103,7 +110,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
             dilations.push_back(list.i(i));
         std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
     }
-
+    
     T_RTG_INST_REF new_ins;
     if (addTranspose) {
         const T_RTG_INST_REF ins = inputs[0];
@@ -116,6 +123,16 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         new_ins = ctx.program->add_instruction(op, inputs);
     }
     ctx.instructions[nodeDef.name()] = new_ins;
+    ctx.rtgInsOutputFormat[&(*new_ins)] = "NCHW";
+#if 0    
+    if (addTranspose) {
+        T_RTG_INST_REF outs;
+        outs.push_back(new_ins);
+        std::vector<int64_t> perm = {0, 2, 3, 1};
+        auto result1 = ctx.program->add_instruction(rtg::transpose{perm}, outs);
+        auto result2 = ctx.program->add_instruction(rtg::contiguous{}, result1);
+    }
+#endif    
     return Status::OK();
 }
 
@@ -159,7 +176,11 @@ Status AddIdentity(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS
 }
 
 Status AddActivation(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& inputs) {
-    ctx.instructions[nodeDef.name()] = ctx.program->add_instruction(rtg::activation{"relu"}, inputs);
+    bool nchw = ctx.getNCHWFormat(inputs);
+    T_RTG_INST_REF ins = ctx.program->add_instruction(rtg::activation{"relu"}, inputs);
+    ctx.instructions[nodeDef.name()] = ins;
+    if (nchw)
+        ctx.rtgInsOutputFormat[&(*ins)] = "NCHW";
     return Status::OK();
 }
 
@@ -265,7 +286,7 @@ void Converter::add_parameter(const NodeDef& nodeDef)  {
     instructions[name] = program->add_parameter(name, shape);
 }
 
-void Converter::add_instruction(const Node* node)  {
+void Converter::add_instruction(const Node* node, bool isExit)  {
     OpConverter op_converter = op_registry_.at(node->type_string());
     T_RTG_INST_REFS inputs;
     std::vector<const Edge*> input_edges;
@@ -283,9 +304,21 @@ void Converter::add_instruction(const Node* node)  {
             continue;
         const string& name = edge->src()->name();
         CHECK(instructions.find(name) != instructions.end()) << "missing input instruction";
-        inputs.push_back(instructions[name]);
+        T_RTG_INST_REF input = instructions[name];
+        inputs.push_back(input);
     }
     Status s = op_converter(*this, node->def(), inputs);;
+    T_RTG_INST_REF ins = std::prev(program->end());
+    rtg::instruction* ptr = &(*ins);
+    if (isExit && (rtgInsOutputFormat.find(ptr) != rtgInsOutputFormat.end())) {
+        CHECK(rtgInsOutputFormat[ptr] == "NCHW") << "Unexpected data format";
+        T_RTG_INST_REF ins = std::prev(program->end());
+        T_RTG_INST_REFS args;
+        args.push_back(ins);
+        std::vector<int64_t> perm = {0, 2, 3, 1};
+        auto result1 = program->add_instruction(rtg::transpose{perm}, args);
+        program->add_instruction(rtg::contiguous{}, result1);
+    }
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
@@ -327,6 +360,19 @@ void Converter::getNodeType(const NodeDef& nodeDef, DataType* data_type)
     }
 }
 
+bool Converter::getNCHWFormat(const T_RTG_INST_REFS& inputs) {
+    bool nchw = false;
+    for (auto iter = inputs.begin(), end = inputs.end(); iter != end; iter++) {
+        T_RTG_INST_REF ins = *iter;
+        rtg::instruction* ptr = &(*ins);
+        if (rtgInsOutputFormat.find(ptr) != rtgInsOutputFormat.end()) {
+            CHECK(rtgInsOutputFormat[ptr] == "NCHW") << "unexpected input format";
+            nchw = true;
+        }
+    }
+    return nchw;
+}
+    
 rtg::shape::type_t Converter::getShapeType(const DataType& data_type)
 {
     switch (data_type) {
@@ -437,7 +483,7 @@ void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
     if (convert.rtgInsCnt.find(name) == convert.rtgInsCnt.end()) {
         convert.rtgInsCnt[name] = 0;
     } else {
-        cnt = (convert.rtgInsCnt[name])++;
+        cnt = ++(convert.rtgInsCnt[name]);
     }
     string new_name = ins.op.name() + Converter::prefix + std::to_string(cnt) + Converter::postfix;
     attrs.set_name(new_name);
@@ -750,7 +796,7 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
     return Status::OK();    
 }
 
-Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs) {
+Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs, std::unordered_map<int, unsigned>& id2Mask) {
     rtg::program * program = new rtg::program;
     if (!program)
         return errors::Internal("Fail to create RTG program");
@@ -768,12 +814,13 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     string cluster_name;
     string device;
     for (Node* node : cluster.nodes) {
-        fwd_convert.add_instruction(node);
+        bool isExit = (id2Mask[node->id()] & (1 << is_exit)) ? true : false;
+        fwd_convert.add_instruction(node, isExit);
         cluster_name += node->name();
         device = node->assigned_device_name();
     }
     std::cout << *program << std::endl;
-    // call program->compile()
+    // call program->optimize()
     Converter bwd_convert(program, nullptr);
     // TODO: use gpu
 #if 0    
@@ -791,11 +838,6 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
     CHECK_NOTNULL(g);
     const Graph& graph = **g;
     RTGLIB::dump_graph::DumpGraphToFile("Before convert graph to RTG", graph);
-
-    typedef enum {
-        is_entry = 0,
-        is_exit
-    } NodeMask;
 
     std::unordered_map<int, unsigned> id2Order, id2Segment, id2Mask;
     std::unordered_map<int, bool> id2Candidate, id2Visit;
@@ -914,7 +956,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
             Cluster& cluster = clusters[id];
             if (cluster.getSize() < MIN_CLUSTER_SIZE)
                 continue;
-            ConvertSubgraphToRTG(g, cluster, inputs);
+            ConvertSubgraphToRTG(g, cluster, inputs, id2Mask);
         }
     }
 
