@@ -50,10 +50,11 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     unsigned input_size = ctx->num_inputs();
     OP_REQUIRES(ctx, input_size == param_names.size(),
                 errors::InvalidArgument("unmatched parameters and inputs"));
-    
-    for (int i = input_size - 1; i >= 0; --i) {
+
+    std::vector<const Tensor*> input_ptrs;
+    for (unsigned i = 0; i < input_size; ++i) {
         const Tensor& input = ctx->input(i);
-        rtglib::convert::AddInput(program, input);
+        input_ptrs.push_back(&input);
     }
     OP_REQUIRES(ctx, ctx->num_outputs() == 1,
                 errors::InvalidArgument("expect single output"));
@@ -62,7 +63,7 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     rtglib::convert::GetOutputShape(program, output_shape);
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    rtglib::convert::EvalProgram(program, param_names, output);
+    rtglib::convert::EvalProgram(program, param_names, output, input_ptrs);
     ctx->set_output(0, *output);
     
 #if 0    

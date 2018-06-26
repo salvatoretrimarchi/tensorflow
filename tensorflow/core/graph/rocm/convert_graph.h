@@ -33,7 +33,7 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-#define MIN_CLUSTER_SIZE 3
+#define MIN_CLUSTER_SIZE 2
 
 typedef enum {
     is_entry = 0,

@@ -119,11 +119,11 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         auto result2 = ctx.program->add_instruction(rtg::contiguous{}, result1);
         new_inputs[0] = result2;
         new_ins = ctx.program->add_instruction(op, new_inputs);
+        ctx.rtgInsOutputFormat[&(*new_ins)] = "NCHW";        
     } else {
         new_ins = ctx.program->add_instruction(op, inputs);
     }
     ctx.instructions[nodeDef.name()] = new_ins;
-    ctx.rtgInsOutputFormat[&(*new_ins)] = "NCHW";
 #if 0    
     if (addTranspose) {
         T_RTG_INST_REF outs;
@@ -310,6 +310,7 @@ void Converter::add_instruction(const Node* node, bool isExit)  {
     Status s = op_converter(*this, node->def(), inputs);;
     T_RTG_INST_REF ins = std::prev(program->end());
     rtg::instruction* ptr = &(*ins);
+
     if (isExit && (rtgInsOutputFormat.find(ptr) != rtgInsOutputFormat.end())) {
         CHECK(rtgInsOutputFormat[ptr] == "NCHW") << "Unexpected data format";
         T_RTG_INST_REF ins = std::prev(program->end());
@@ -319,6 +320,7 @@ void Converter::add_instruction(const Node* node, bool isExit)  {
         auto result1 = program->add_instruction(rtg::transpose{perm}, args);
         program->add_instruction(rtg::contiguous{}, result1);
     }
+
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
@@ -762,8 +764,9 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
     // Add control edges at the end.
     for (const Edge* edge : cluster.output_edges) {
         if (edge->IsControlEdge()) {
+            Node* dst = edge->dst();
             graph.RemoveEdge(edge);
-            graph.AddControlEdge(rtg_node, edge->dst());
+            graph.AddControlEdge(rtg_node, dst);
         }
     }
     
@@ -826,7 +829,7 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
 #if 0    
     bwd_convert.device = device;
 #else
-    bwd_convert.device = param_device;
+    bwd_convert.device = "/job:localhost/replica:0/task:0/cpu:0";
 #endif
     TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
