@@ -1748,7 +1748,7 @@ cc_library(
              ]),
         copts = tf_copts() + ["-g", "-O0", ] + ["-std=c++14"]
                 + ["-fexceptions"],
-        linkopts = if_rocm(["-lrtg"] + ["-lrtg_cpu"]),
+        linkopts = if_rocm(["-lrtg"] + ["-lrtg_cpu"] + ["-lrtg_miopen"]),
         deps = [
             ":core_cpu",
             ":core_cpu_internal",

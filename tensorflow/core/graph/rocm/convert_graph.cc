@@ -446,6 +446,19 @@ void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shap
         tensor_shape.AddDim(lens[i]);
 }
 
+rtg::shape Converter::getShape(const Tensor* tensor)
+{
+    int num_dims = tensor->dims();
+    std::vector<std::size_t> dims;
+    for (int i = 0; i < num_dims; ++i) {
+        int64 dim_size = tensor->dim_size(i);
+        dims.push_back(dim_size);
+    }
+    rtg::shape::type_t shape_type = getShapeType(tensor->dtype());
+    rtg::shape shape = {shape_type, dims};
+    return shape;
+}
+
 void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li, bool reuse_memory)
 {
     const TensorShapeProto& tensor_shape = tensor.tensor_shape();
@@ -799,7 +812,7 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
     return Status::OK();    
 }
 
-Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs, std::unordered_map<int, unsigned>& id2Mask) {
+Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs, std::unordered_map<int, unsigned>& id2Mask, bool use_gpu) {
     rtg::program * program = new rtg::program;
     if (!program)
         return errors::Internal("Fail to create RTG program");
@@ -826,11 +839,9 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     // call program->optimize()
     Converter bwd_convert(program, nullptr);
     // TODO: use gpu
-#if 0    
     bwd_convert.device = device;
-#else
-    bwd_convert.device = "/job:localhost/replica:0/task:0/cpu:0";
-#endif
+    if (!use_gpu)
+        bwd_convert.device = "/job:localhost/replica:0/task:0/cpu:0";
     TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
     delete program;
@@ -838,6 +849,10 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
 }
 
 Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
+    const char* env_val = getenv("TF_MIGRAPH_USE_GPU");
+    bool use_gpu = false;
+    if (env_val != nullptr)
+        use_gpu = atoi(env_val);
     CHECK_NOTNULL(g);
     const Graph& graph = **g;
     RTGLIB::dump_graph::DumpGraphToFile("Before convert graph to RTG", graph);
@@ -959,7 +974,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
             Cluster& cluster = clusters[id];
             if (cluster.getSize() < MIN_CLUSTER_SIZE)
                 continue;
-            ConvertSubgraphToRTG(g, cluster, inputs, id2Mask);
+            ConvertSubgraphToRTG(g, cluster, inputs, id2Mask, use_gpu);
         }
     }
 

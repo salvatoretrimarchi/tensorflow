@@ -25,7 +25,9 @@ limitations under the License.
 #include "rocm/include/rtg/program.hpp"
 #include "rocm/include/rtg/operators.hpp"
 #include "rocm/include/rtg/cpu/cpu_target.hpp"
-
+#include "rocm/include/rtg/miopen/miopen_target.hpp"
+#include "rocm/include/rtg/miopen/miopen.hpp"
+#include "rocm/include/miopen/miopen.h"
 
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()
 
@@ -84,6 +86,7 @@ struct Converter {
     rtg::shape getNodeShape(const NodeDef&, DataType* p_dtype = nullptr);
     rtg::shape getAttrShape(const NameAttrList&);
     rtg::shape::type_t getShapeType(const DataType&);
+    rtg::shape getShape(const Tensor*);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
     void getLiteralFromTensor(const TensorProto&, rtg::literal&, bool);
@@ -132,7 +135,7 @@ Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_REFS&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
-Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*, std::unordered_map<int, unsigned>&);
+Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*, std::unordered_map<int, unsigned>&, bool);
 Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
 void SetInputAttr(rtg::instruction&, NameAttrList&, Converter&);
 void SetNameAttr(rtg::instruction&, NameAttrList&, Converter&); 

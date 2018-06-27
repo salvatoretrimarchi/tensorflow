@@ -37,39 +37,49 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
     *p_program = program;
 }
 
-void EvalProgram(void* p_program, std::vector<string>& param_names, Tensor* output, std::vector<const Tensor*>& input_ptrs)
+void EvalProgram(void* p_program, std::vector<string>& param_names, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
 {
     rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
     std::unordered_map<string, rtg::argument> params;
     int size = param_names.size();
     Converter convert(program, nullptr);
-    for (int i = 0; i < size; ++i) {
-        TensorProto tensor_proto;
-        input_ptrs[i]->AsProtoTensorContent(&tensor_proto);
-        rtg::literal li;
-        convert.getLiteralFromTensor(tensor_proto, li, false);
-        params[param_names[i]] = li.get_argument();
-    }
-#if 0
-    int count = 0;
-    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
-        CHECK(convert.starts_with(ins.op.name(), Converter::literal_prefix)) << "Expect literals";
-        params[param_names[count]] = ins.lit.get_argument();
-        if (++count == size)
-            break;
-    }
-#endif        
-    program->compile(rtg::cpu::cpu_target{});
+    if (!use_gpu) {
+        for (int i = 0; i < size; ++i) {
+            TensorProto tensor_proto;
+            input_ptrs[i]->AsProtoTensorContent(&tensor_proto);
+            rtg::literal li;
+            convert.getLiteralFromTensor(tensor_proto, li, false);
+            params[param_names[i]] = li.get_argument();
+        }
+        program->compile(rtg::cpu::cpu_target{});
+    } else {
+        for (int i = 0; i < size; ++i) {
+            const Tensor* ptr = input_ptrs[i];
+            rtg::shape shape = convert.getShape(ptr);
+            char* data = const_cast<char*> (ptr->tensor_data().data());
+            rtg::argument arg = {shape, data};
+            params[param_names[i]] = arg;
+        }
+        program->compile(rtg::miopen::miopen_target{});
+        auto handle = rtg::miopen::make_obj<rtg::miopen::miopen_handle>(&miopenCreate);
+        params["handle"] = {rtg::shape::any_type, handle.get()};
+    } 
     rtg::argument arg = program->eval(params);
     const TensorShape dst_shape = output->shape();
     const rtg::shape arg_shape = arg.get_shape();
     TensorShape src_shape;
     convert.getTensorShape(arg_shape, src_shape);
     CHECK(src_shape.IsSameSize(dst_shape));
+#if 0    
     float* f_ptr = arg.cast<float>();
     size = arg_shape.bytes()/sizeof(float);
-    memcpy(const_cast<char*> (output->tensor_data().data()),
-           arg.cast<char>(), arg_shape.bytes());
+#endif
+    if (!use_gpu) {
+        memcpy(const_cast<char*> (output->tensor_data().data()),
+               arg.cast<char>(), arg_shape.bytes());
+    } else {
+
+    }
 }
 
 void GetOutputShape(void * p_program, TensorShape& ret_shape)

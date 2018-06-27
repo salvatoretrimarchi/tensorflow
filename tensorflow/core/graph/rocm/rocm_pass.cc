@@ -48,9 +48,9 @@ Status ROCmPass::Run(
     if (options.graph == nullptr && options.partition_graphs == nullptr) {
         return Status::OK();
     }
-    const char* enable_rtg = getenv("TF_ENABLE_RTG");
-    if (enable_rtg != nullptr) {
-        int env_val = atoi(enable_rtg);
+    const char* enable_migraph = getenv("TF_ENABLE_MIGRAPH");
+    if (enable_migraph != nullptr) {
+        int env_val = atoi(enable_migraph);
         if (env_val == 0)
             return Status::OK();
     }
