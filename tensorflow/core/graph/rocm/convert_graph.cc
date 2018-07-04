@@ -155,19 +155,8 @@ Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& i
     ctx.getNodeType(nodeDef, &dataType);
     rtg::shape shape = ctx.getNodeShape(nodeDef, &dataType);
     rtg::literal li;
-    switch (dataType) {
-    case DT_FLOAT:{
-        const float * ptr = reinterpret_cast<const float*>(content.data());
-        int size = content.size()/sizeof(float);
-        std::vector<float> data;
-        for (int i = 0; i < size; i++)
-            data.push_back(ptr[i]);
-        li = rtg::literal{shape, data.begin(), data.end()};
-        break;
-    }
-    default:
-        CHECK(false) << "unknown data type";
-    }
+    const char* data_ptr = reinterpret_cast<const char*>(content.data());
+    ctx.getLiteral(shape, data_ptr, content.size(), li);
     ctx.instructions[nodeDef.name()] = ctx.program->add_literal(li);
     return Status::OK();
 }
@@ -338,21 +327,10 @@ T_RTG_INST_REF Converter::add_transpose(const T_RTG_INST_REFS& inputs, int index
         rtg::argument arg = eval_program->eval(params);
         rtg::shape arg_shape = arg.get_shape();
         int arg_size = arg_shape.bytes();
-        DataType data_type = getType(arg_shape.type());
-        T_RTG_INST_REF new_ins;
-        switch (data_type) {
-        case DT_FLOAT: {
-            std::vector<float> data;
-            int size = arg_size/sizeof(float);
-            const float * ptr = arg.cast<float>();
-            for (int i = 0; i < size; i++)
-                data.push_back(ptr[i]);
-            new_ins = program->add_literal(arg_shape, data.begin(), data.end());
-            break;
-        }
-        default:
-            CHECK(false) << "unknown data type";
-        }
+        rtg::literal new_li;
+        const char * data_ptr = arg.cast<char>();
+        getLiteral(arg_shape, data_ptr, arg_size, new_li);
+        T_RTG_INST_REF new_ins = program->add_literal(new_li);
         delete eval_program;
         return new_ins;
     } else {
@@ -496,7 +474,25 @@ rtg::shape Converter::getShape(const Tensor* tensor)
     return shape;
 }
 
-void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li, bool reuse_memory)
+void Converter::getLiteral(rtg::shape shape, const char * data_ptr, int size, rtg::literal& li)
+{
+    DataType data_type = getType(shape.type());
+    switch (data_type) {
+    case DT_FLOAT: {
+        std::vector<float> data;
+        int vec_size = size/sizeof(float);
+        const float * ptr = reinterpret_cast<const float*>(data_ptr);
+        for (int i = 0; i < vec_size; i++)
+            data.push_back(ptr[i]);
+        li = rtg::literal{shape, data.begin(), data.end()};
+        break;
+    }
+    default:
+        CHECK(false) << "unknown data type";
+    }
+}
+    
+void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li)
 {
     const TensorShapeProto& tensor_shape = tensor.tensor_shape();
     auto& content = tensor.tensor_content();
@@ -508,24 +504,8 @@ void Converter::getLiteralFromTensor(const TensorProto& tensor, rtg::literal& li
     }
     rtg::shape::type_t shape_type = getShapeType(data_type);
     rtg::shape shape = {shape_type, dims};
-    switch (data_type) {
-    case DT_FLOAT:{
-        if (!reuse_memory) {
-            const float * ptr = reinterpret_cast<const float*>(content.data());
-            int size = content.size()/sizeof(float);
-            std::vector<float> data;
-            for (int i = 0; i < size; i++)
-                data.push_back(ptr[i]);
-            li = rtg::literal{shape, data.begin(), data.end()};
-        } else {
-            const char * ptr = reinterpret_cast<const char*>(content.data());
-            li = rtg::literal(shape, ptr);
-        }
-        break;
-    }
-    default:
-        CHECK(false) << "unknown data type";
-    }
+    const char* data_ptr = reinterpret_cast<const char*>(content.data());
+    getLiteral(shape, data_ptr, content.size(), li);
 }
 
 void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
@@ -654,7 +634,7 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
     auto map = func.attr();
     const auto& tensor = map.at("value").tensor();
     rtg::literal li;
-    convert->getLiteralFromTensor(tensor, li, false);
+    convert->getLiteralFromTensor(tensor, li);
     convert->instructions[name] = convert->program->add_literal(li);
 }
 

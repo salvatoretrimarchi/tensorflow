@@ -92,7 +92,8 @@ struct Converter {
     rtg::shape getShape(const Tensor*);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
-    void getLiteralFromTensor(const TensorProto&, rtg::literal&, bool);
+    void getLiteralFromTensor(const TensorProto&, rtg::literal&);
+    void getLiteral(rtg::shape, const char*, int, rtg::literal&);
     std::unordered_map<string, OpConverter> op_registry_;
     std::unordered_map<string, AttrEncoder> attr_encoder_registry_;
     std::unordered_map<string, AttrDecoder> attr_decoder_registry_;
