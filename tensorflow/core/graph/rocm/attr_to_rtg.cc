@@ -37,48 +37,75 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
     *p_program = program;
 }
 
-void EvalProgram(void* p_program, std::vector<string>& param_names, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
+void EvalProgram(OpKernelContext* ctx, void* p_program, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
 {
     rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
-    std::unordered_map<string, rtg::argument> params;
-    int size = param_names.size();
     Converter convert(program, nullptr);
-    if (!use_gpu) {
-        for (int i = 0; i < size; ++i) {
-            TensorProto tensor_proto;
-            input_ptrs[i]->AsProtoTensorContent(&tensor_proto);
-            rtg::literal li;
-            convert.getLiteralFromTensor(tensor_proto, li, false);
-            params[param_names[i]] = li.get_argument();
-        }
-        program->compile(rtg::cpu::cpu_target{});
-    } else {
-        for (int i = 0; i < size; ++i) {
-            const Tensor* ptr = input_ptrs[i];
+    rtg::shape output_shape = convert.getShape(output);
+    char* output_ptr = const_cast<char*> (output->tensor_data().data());
+    rtg::argument arg;
+    int param_cnt = 0;
+    std::unordered_map<string, rtg::argument> params;
+
+    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
+        string name = ins.op.name();
+        if (convert.starts_with(name, Converter::param_prefix)) {
+            name = rtg::any_cast<rtg::builtin::param>(ins.op).parameter;
+            const Tensor* ptr = input_ptrs[param_cnt++];
             rtg::shape shape = convert.getShape(ptr);
             char* data = const_cast<char*> (ptr->tensor_data().data());
             rtg::argument arg = {shape, data};
-            params[param_names[i]] = arg;
+            params[name] = arg;
+        } else if (!use_gpu) {
+            break;
+        } else if (convert.starts_with(name, Converter::literal_prefix)) {
+            // place literal in GPU memory
+#if 0            
+            const char* data = ins.lit.data();
+            const rtg::shape& shape = ins.lit.get_shape();
+            DataType type = convert.getType(shape.type());
+            TensorShape tensor_shape;
+            convert.getTensorShape(shape, tensor_shape);
+            Tensor* out_temp;
+            AllocatorAttributes attr;
+            attr.set_on_host(false);
+            OP_REQUIRES_OK(ctx, ctx->allocate_temp(type, tensor_shape, out_temp, attr));
+#else
+            std::string str = ins.op.name();
+            rtg::argument arg = rtg::miopen::to_gpu(ins.lit.get_argument());
+            params[str] = arg;
+#endif            
         }
-        program->compile(rtg::miopen::miopen_target{});
+    }
+    if (!use_gpu) {
+        program->compile(rtg::cpu::cpu_target{});
+        arg = program->eval(params);
+    } else  {
+        
         auto handle = rtg::miopen::make_obj<rtg::miopen::miopen_handle>(&miopenCreate);
+
+        params["output"] = {output_shape, output_ptr};
         params["handle"] = {rtg::shape::any_type, handle.get()};
-    } 
-    rtg::argument arg = program->eval(params);
-    const TensorShape dst_shape = output->shape();
+        program->compile(rtg::miopen::miopen_target{});
+        std::cout << *program << std::endl;
+        arg = program->eval(params);
+    }
+    const TensorShape dst_shape = output->shape();    
     const rtg::shape arg_shape = arg.get_shape();
     TensorShape src_shape;
     convert.getTensorShape(arg_shape, src_shape);
     CHECK(src_shape.IsSameSize(dst_shape));
-#if 0    
-    float* f_ptr = arg.cast<float>();
-    size = arg_shape.bytes()/sizeof(float);
-#endif
     if (!use_gpu) {
         memcpy(const_cast<char*> (output->tensor_data().data()),
                arg.cast<char>(), arg_shape.bytes());
     } else {
-
+#if 1
+        rtg::argument ret = {arg_shape, output_ptr};
+        rtg::argument val = rtg::miopen::from_gpu(ret);
+        float* f_ptr = val.cast<float>();
+        float ele = f_ptr[0];
+#endif                
+        
     }
 }
 
@@ -89,37 +116,6 @@ void GetOutputShape(void * p_program, TensorShape& ret_shape)
     rtg::shape shape = ins->result;
     Converter convert(program, nullptr);
     convert.getTensorShape(shape, ret_shape);
-}
-
-#if 0    
-void AddInput(void * p_program, const Tensor& input)
-{
-    rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
-    Converter convert(program, nullptr);
-    TensorProto tensor_proto;
-    input.AsProtoTensorContent(&tensor_proto);
-    rtg::literal li;
-    convert.getLiteralFromTensor(tensor_proto, li, false);
-    T_RTG_INST_REF ins = program->begin();
-    T_RTG_INST_REF new_ins = program->insert_literal(ins, li);
-    CHECK(program->begin() == new_ins) << "insert error";
-    std::cout << *program << std::endl;
-}
-#endif    
-
-void GetParamNames(void* p_program,  std::vector<string>& param_names)
-{
-    rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
-    Converter convert(program, nullptr);
-    for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
-        string name = ins.op.name();
-        if (convert.starts_with(name, Converter::param_prefix)) {
-            name = rtg::any_cast<rtg::builtin::param>(ins.op).parameter;
-            param_names.push_back(name);
-        } else {
-            break;
-        }
-    }
 }
 
 } // namspace convert

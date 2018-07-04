@@ -46,11 +46,9 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     // Execute the computation.
     VLOG(2) << "Executing computation.";
 
-    std::vector<string> param_names;
-    rtglib::convert::GetParamNames(program, param_names);
+    Device* device = static_cast<Device*>(ctx->device());
+    bool use_gpu = (device->device_type() == DEVICE_GPU) ? true : false;
     unsigned input_size = ctx->num_inputs();
-    OP_REQUIRES(ctx, input_size == param_names.size(),
-                errors::InvalidArgument("unmatched parameters and inputs"));
 
     std::vector<const Tensor*> input_ptrs;
     for (unsigned i = 0; i < input_size; ++i) {
@@ -64,9 +62,8 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     rtglib::convert::GetOutputShape(program, output_shape);
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    Device* device = static_cast<Device*>(ctx->device());
-    bool use_gpu = (device->device_type() == DEVICE_GPU) ? true : false;
-    rtglib::convert::EvalProgram(program, param_names, output, input_ptrs, use_gpu);
+
+    rtglib::convert::EvalProgram(ctx, program, output, input_ptrs, use_gpu);
     ctx->set_output(0, *output);
     
 #if 0    
@@ -109,7 +106,7 @@ RTGLaunchOp::~RTGLaunchOp() {
 
 //TODO: back to GPU
 REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_GPU), RTGLaunchOp);
-// REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_CPU), RTGLaunchOp);    
+    //REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_CPU), RTGLaunchOp);    
 
 }  // namespace tensorflow
 

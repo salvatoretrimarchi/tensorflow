@@ -24,9 +24,11 @@ limitations under the License.
 #include "rocm/include/rtg/instruction.hpp"
 #include "rocm/include/rtg/program.hpp"
 #include "rocm/include/rtg/operators.hpp"
+#include "rocm/include/rtg/generate.hpp"
 #include "rocm/include/rtg/cpu/cpu_target.hpp"
 #include "rocm/include/rtg/miopen/miopen_target.hpp"
 #include "rocm/include/rtg/miopen/miopen.hpp"
+#include "rocm/include/rtg/miopen/hip.hpp"
 #include "rocm/include/miopen/miopen.h"
 
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()
@@ -80,6 +82,7 @@ struct Converter {
     bool isRegistered(const Node*);
     void add_instruction(const Node*, bool);
     void add_parameter(const NodeDef&);
+    T_RTG_INST_REF add_transpose(const T_RTG_INST_REFS&, int, std::vector<int64_t>&);
     void decodeAttr(const NameAttrList&);
     void getNodeType(const NodeDef&, DataType*);
     bool getNCHWFormat(const T_RTG_INST_REFS&);

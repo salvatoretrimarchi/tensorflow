@@ -36,7 +36,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
     int w_index = 3;
     int filter_row_index = 0;
     int filter_col_index = 1;
-    bool addTranspose = false;
+    bool addInputTranspose = false;
     // MIGraph use "NCHW" as default.
     if (ctx.starts_with(data_format, "NHWC")) {
         h_index = 1;
@@ -44,7 +44,7 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         T_RTG_INST_REF input0 = inputs[0];
         rtg::instruction* ptr = &(*input0);
         if (ctx.rtgInsOutputFormat.find(ptr) == ctx.rtgInsOutputFormat.end()) {
-            addTranspose = true;
+            addInputTranspose = true;
         } else {
             CHECK(ctx.rtgInsOutputFormat[ptr] == "NCHW") << "unexpected input format";
         }
@@ -111,21 +111,23 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_REFS& 
         std::copy(dilations.begin(), dilations.end(), op.dilation.begin());
     }
     
-    T_RTG_INST_REF new_ins;
-    if (addTranspose) {
-        const T_RTG_INST_REF ins = inputs[0];
-        std::vector<int64_t> perm = {0, 3, 1, 2};
-        auto result1 = ctx.program->add_instruction(rtg::transpose{perm}, ins);
-        auto result2 = ctx.program->add_instruction(rtg::contiguous{}, result1);
-        new_inputs[0] = result2;
-        new_ins = ctx.program->add_instruction(op, new_inputs);
-        ctx.rtgInsOutputFormat[&(*new_ins)] = "NCHW";        
-    } else {
-        new_ins = ctx.program->add_instruction(op, inputs);
+    if (addInputTranspose) {
+        // Transpose input.
+        std::vector<int64_t> perm0 = {0, 3, 1, 2};
+        new_inputs[0] = ctx.add_transpose(inputs, 0, perm0);
     }
+    
+    // Transpose filter.
+    std::vector<int64_t> perm1 = {3, 2, 0, 1};
+    new_inputs[1] = ctx.add_transpose(inputs, 1, perm1);
+    T_RTG_INST_REF new_ins = ctx.program->add_instruction(op, new_inputs);
     ctx.instructions[nodeDef.name()] = new_ins;
+
+    if (addInputTranspose)
+        ctx.rtgInsOutputFormat[&(*new_ins)] = "NCHW";
+    
 #if 0    
-    if (addTranspose) {
+    if (addInputTranspose) {
         T_RTG_INST_REF outs;
         outs.push_back(new_ins);
         std::vector<int64_t> perm = {0, 2, 3, 1};
@@ -324,6 +326,41 @@ void Converter::add_instruction(const Node* node, bool isExit)  {
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
+T_RTG_INST_REF Converter::add_transpose(const T_RTG_INST_REFS& inputs, int index, std::vector<int64_t>& perm) {
+    const T_RTG_INST_REF ins = inputs[index];
+    if (starts_with(ins->op.name(), Converter::literal_prefix)) {
+        rtg::program * eval_program = new rtg::program;
+        auto li = eval_program->add_literal(ins->lit);
+        auto trans = eval_program->add_instruction(rtg::transpose{perm}, li);
+        eval_program->add_instruction(rtg::contiguous{}, trans);
+        eval_program->compile(rtg::cpu::cpu_target{});
+        std::unordered_map<string, rtg::argument> params;
+        rtg::argument arg = eval_program->eval(params);
+        rtg::shape arg_shape = arg.get_shape();
+        int arg_size = arg_shape.bytes();
+        DataType data_type = getType(arg_shape.type());
+        T_RTG_INST_REF new_ins;
+        switch (data_type) {
+        case DT_FLOAT: {
+            std::vector<float> data;
+            int size = arg_size/sizeof(float);
+            const float * ptr = arg.cast<float>();
+            for (int i = 0; i < size; i++)
+                data.push_back(ptr[i]);
+            new_ins = program->add_literal(arg_shape, data.begin(), data.end());
+            break;
+        }
+        default:
+            CHECK(false) << "unknown data type";
+        }
+        delete eval_program;
+        return new_ins;
+    } else {
+        auto result = program->add_instruction(rtg::transpose{perm}, ins);
+        return program->add_instruction(rtg::contiguous{}, result);
+    }
+}
+    
 void Converter::decodeAttr(const NameAttrList& func)
 {
     string name = func.name();
