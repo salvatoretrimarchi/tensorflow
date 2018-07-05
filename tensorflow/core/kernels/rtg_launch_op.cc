@@ -25,10 +25,55 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
+#include "tensorflow/core/common_runtime/gpu/gpu_util.h"
 
 namespace gpu = perftools::gputools;
 
 namespace tensorflow {
+
+class MIGraphScratchAllocator : public perftools::gputools::ScratchAllocator {
+ public:
+  virtual ~MIGraphScratchAllocator() {}
+  MIGraphScratchAllocator(int64 memory_limit, OpKernelContext* context)
+      : memory_limit_(memory_limit), total_byte_size_(0), context_(context) {}
+  virtual int64 GetMemoryLimitInBytes(
+      perftools::gputools::Stream* stream) override {
+    return memory_limit_;
+  }
+  virtual perftools::gputools::port::StatusOr<
+      perftools::gputools::DeviceMemory<uint8>>
+  AllocateBytes(perftools::gputools::Stream* stream, int64 byte_size) override {
+    Tensor temporary_memory;
+    if (byte_size > memory_limit_) {
+      return perftools::gputools::port::StatusOr<
+          perftools::gputools::DeviceMemory<uint8>>();
+    }
+    AllocationAttributes allocation_attr;
+    allocation_attr.no_retry_on_failure = true;
+    Status allocation_status(context_->allocate_temp(
+        DT_UINT8, TensorShape({byte_size}), &temporary_memory,
+        AllocatorAttributes(), allocation_attr));
+    if (!allocation_status.ok()) {
+      return perftools::gputools::port::StatusOr<
+          perftools::gputools::DeviceMemory<uint8>>();
+    }
+    // Hold the reference of the allocated tensors until the end of the
+    // allocator.
+    allocated_tensors_.push_back(temporary_memory);
+    total_byte_size_ += byte_size;
+    return perftools::gputools::port::StatusOr<
+        perftools::gputools::DeviceMemory<uint8>>(
+        AsDeviceMemory(temporary_memory.flat<uint8>().data(),
+                       temporary_memory.flat<uint8>().size()));
+  }
+  int64 TotalByteSize() { return total_byte_size_; }
+
+ private:
+  int64 memory_limit_;
+  int64 total_byte_size_;
+  OpKernelContext* context_;
+  std::vector<Tensor> allocated_tensors_;
+}; 
 
 RTGLaunchOp::RTGLaunchOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   const NameAttrList* func;
@@ -63,7 +108,7 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
 
-    rtglib::convert::EvalProgram(ctx, program, output, input_ptrs, use_gpu);
+    rtglib::convert::EvalProgram(program, output, input_ptrs, use_gpu);
     ctx->set_output(0, *output);
     
 #if 0    

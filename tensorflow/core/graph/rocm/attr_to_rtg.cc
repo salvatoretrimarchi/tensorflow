@@ -16,6 +16,7 @@ limitations under the License.
 #ifdef TENSORFLOW_USE_ROCM
 #include "attr_to_rtg.h"
 #include "convert_graph.h"
+#include "tensorflow/stream_executor/scratch_allocator.h"
 
 namespace tensorflow {
 namespace rtglib {
@@ -37,7 +38,7 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
     *p_program = program;
 }
 
-void EvalProgram(OpKernelContext* ctx, void* p_program, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
+void EvalProgram(void* p_program, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
 {
     rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
     Converter convert(program, nullptr);

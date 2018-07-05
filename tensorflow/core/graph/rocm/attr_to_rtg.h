@@ -19,14 +19,14 @@ limitations under the License.
 
 #ifndef TENSORFLOW_RTGLIB_COMMON_HEADER_
 #include "common_headers.h"
-#include "tensorflow/core/framework/op_kernel.h"
+// #include "tensorflow/core/framework/op_kernel.h"
 #endif  // TENSORFLOW_RTGLIB_COMMON_HEADER_
 
 namespace tensorflow {
 namespace rtglib {
 namespace convert {
 void GetProgram(const NameAttrList&, void **);
-void EvalProgram(OpKernelContext*, void*, Tensor*, std::vector<const Tensor*>&, bool);
+void EvalProgram(void*, Tensor*, std::vector<const Tensor*>&, bool);
 void GetOutputShape(void *, TensorShape&);
 
 } // namspace convert

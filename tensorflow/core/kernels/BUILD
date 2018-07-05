@@ -5656,6 +5656,7 @@ tf_rocm_kernel_library(
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:nn_ops_op_lib",        
         "//tensorflow/core:stream_executor_no_cuda",
+        "//tensorflow/core:gpu_runtime",
         "//tensorflow/core:rtglib_convert",
     ],
     alwayslink = 1,
