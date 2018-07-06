@@ -21,7 +21,7 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-void GetProgram(const NameAttrList& function, void ** p_program) {
+void GetProgram(const NameAttrList& function, void ** p_program, int &bytes) {
     auto attr_map = function.attr();
     AttrValue value = attr_map.at("func");
     int size = value.list().func_size();
@@ -34,10 +34,11 @@ void GetProgram(const NameAttrList& function, void ** p_program) {
         convert.decodeAttr(func);
     }
     std::cout << *program << std::endl;
+    bytes = convert.next_offset;
     *p_program = program;
 }
 
-void EvalProgram(void* p_program, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu)
+void EvalProgram(void* p_program, Tensor* output, std::vector<const Tensor*>& input_ptrs, bool use_gpu, void* scratch_mem_ptr, int size)
 {
     rtg::program* program = reinterpret_cast<rtg::program*>(p_program);
     Converter convert(program, nullptr);
@@ -46,6 +47,7 @@ void EvalProgram(void* p_program, Tensor* output, std::vector<const Tensor*>& in
     rtg::argument arg;
     int param_cnt = 0;
     std::unordered_map<string, rtg::argument> params;
+    char* base_ptr = reinterpret_cast<char*> (scratch_mem_ptr);
 
     for (auto& ins : GET_INSTS_FROM_PROGRAM(program)) {
         string name = ins.op.name();
@@ -60,18 +62,13 @@ void EvalProgram(void* p_program, Tensor* output, std::vector<const Tensor*>& in
             break;
         } else if (convert.starts_with(name, Converter::literal_prefix)) {
             // place literal in GPU memory
-#if 0            
-            const char* data = ins.lit.data();
-            const rtg::shape& shape = ins.lit.get_shape();
-            DataType type = convert.getType(shape.type());
-            TensorShape tensor_shape;
-            convert.getTensorShape(shape, tensor_shape);
-            Tensor* out_temp;
-            AllocatorAttributes attr;
-            attr.set_on_host(false);
-            OP_REQUIRES_OK(ctx, ctx->allocate_temp(type, tensor_shape, out_temp, attr));
-#else
             std::string str = ins.op.name();
+#if 1
+            rtg::shape shape = ins.lit.get_shape();
+            char * lit_ptr = base_ptr + convert.get_offset(shape);
+            hipMemcpy(lit_ptr, ins.lit.data(), shape.bytes(), hipMemcpyHostToDevice);
+            params[str] = {shape, lit_ptr};
+#else            
             rtg::argument arg = rtg::miopen::to_gpu(ins.lit.get_argument());
             params[str] = arg;
 #endif            

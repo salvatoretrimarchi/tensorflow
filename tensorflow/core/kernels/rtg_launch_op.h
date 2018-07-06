@@ -38,7 +38,7 @@ class RTGLaunchOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override;
  private:
   void * program;
-
+  int required_bytes;
   TF_DISALLOW_COPY_AND_ASSIGN(RTGLaunchOp);
 };
 

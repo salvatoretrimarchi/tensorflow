@@ -636,6 +636,8 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
     rtg::literal li;
     convert->getLiteralFromTensor(tensor, li);
     convert->instructions[name] = convert->program->add_literal(li);
+    rtg::shape shape = li.get_shape();
+    convert->get_offset(shape);
 }
 
 void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string& prefix) {

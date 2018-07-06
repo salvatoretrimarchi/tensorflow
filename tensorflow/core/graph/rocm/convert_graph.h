@@ -32,6 +32,7 @@ limitations under the License.
 #include "rocm/include/miopen/miopen.h"
 
 #define GET_INSTS_FROM_PROGRAM(prog) (prog)->get_instructions()
+#define ALIGN_BYTES(addr, size) (((addr % size) != 0) ? (addr += (size - addr % size)) : addr)
 
 namespace tensorflow {
 namespace rtglib {
@@ -82,6 +83,16 @@ struct Converter {
     bool isRegistered(const Node*);
     void add_instruction(const Node*, bool);
     void add_parameter(const NodeDef&);
+    int get_offset(int bytes, int ele_size) {
+        int cur_offset = ALIGN_BYTES(next_offset, ele_size);
+        next_offset = cur_offset + bytes;
+        return cur_offset;
+    }
+    int get_offset(rtg::shape shape) {
+        int bytes = shape.bytes();
+        int ele_size = bytes/shape.elements();
+        return get_offset(bytes, ele_size);
+    }
     T_RTG_INST_REF add_transpose(const T_RTG_INST_REFS&, int, std::vector<int64_t>&);
     void decodeAttr(const NameAttrList&);
     void getNodeType(const NodeDef&, DataType*);
@@ -98,6 +109,7 @@ struct Converter {
     std::unordered_map<string, AttrEncoder> attr_encoder_registry_;
     std::unordered_map<string, AttrDecoder> attr_decoder_registry_;
     void Init() {
+        next_offset = 0;
         register_op_converters();
         register_attr_encoders();
         register_attr_decoders();
@@ -119,6 +131,7 @@ struct Converter {
     std::unordered_map<string, int> rtgInsCnt;
     rtg::program* program;
     T_INPUT_MAP* inputs;
+    int next_offset;
     static const string prefix;
     static const string postfix;
     static const string param_prefix;

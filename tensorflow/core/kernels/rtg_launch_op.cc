@@ -81,7 +81,7 @@ RTGLaunchOp::RTGLaunchOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   const NameAttrList* func;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("function", &func));
   program = nullptr;
-  rtglib::convert::GetProgram(*func, &program);
+  rtglib::convert::GetProgram(*func, &program, required_bytes);
 }
 
 void RTGLaunchOp::Compute(OpKernelContext* ctx) {
@@ -112,10 +112,20 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
 
     // default to 1GB at this moment.
     MIGraphScratchAllocator scratch_allocator(1LL << 32, ctx);
-    auto allocated = scratch_allocator.AllocateBytes(stream, 1024);
-    DeviceMemory<uint8> scratch;
-                 
-    rtglib::convert::EvalProgram(program, output, input_ptrs, use_gpu);
+    void * scratch_mem_ptr = nullptr;
+    int scratch_mem_size = 0;
+    if (required_bytes > 0) {
+        auto allocated = scratch_allocator.AllocateBytes(stream, 1024);
+        DeviceMemory<uint8> scratch;
+        if (allocated.ok()) {
+            scratch = allocated.ValueOrDie();
+            scratch_mem_ptr = scratch.opaque();
+            scratch_mem_size = scratch.size();
+        } else {
+            LOG(WARNING) << allocated.status().error_message();
+        }
+    }
+    rtglib::convert::EvalProgram(program, output, input_ptrs, use_gpu, scratch_mem_ptr, scratch_mem_size);
     ctx->set_output(0, *output);
     
 #if 0    
