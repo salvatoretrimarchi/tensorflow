@@ -23,7 +23,7 @@ limitations under the License.
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/util/stream_executor_util.h"
 #include "tensorflow/core/graph/rocm/attr_to_rtg.h"
-
+#include "tensorflow/stream_executor/scratch_allocator.h"
 namespace tensorflow {
 
 // RTGLaunchOp is used to replace a region of the TensorFlow graph

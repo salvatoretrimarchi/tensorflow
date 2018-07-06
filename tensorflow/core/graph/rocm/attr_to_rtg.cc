@@ -16,7 +16,6 @@ limitations under the License.
 #ifdef TENSORFLOW_USE_ROCM
 #include "attr_to_rtg.h"
 #include "convert_graph.h"
-#include "tensorflow/stream_executor/scratch_allocator.h"
 
 namespace tensorflow {
 namespace rtglib {

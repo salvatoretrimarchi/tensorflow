@@ -31,7 +31,9 @@ namespace gpu = perftools::gputools;
 
 namespace tensorflow {
 
-class MIGraphScratchAllocator : public perftools::gputools::ScratchAllocator {
+using gpu::DeviceMemory;    
+    
+class MIGraphScratchAllocator : public gpu::ScratchAllocator {
  public:
   virtual ~MIGraphScratchAllocator() {}
   MIGraphScratchAllocator(int64 memory_limit, OpKernelContext* context)
@@ -108,6 +110,11 @@ void RTGLaunchOp::Compute(OpKernelContext* ctx) {
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
 
+    // default to 1GB at this moment.
+    MIGraphScratchAllocator scratch_allocator(1LL << 32, ctx);
+    auto allocated = scratch_allocator.AllocateBytes(stream, 1024);
+    DeviceMemory<uint8> scratch;
+                 
     rtglib::convert::EvalProgram(program, output, input_ptrs, use_gpu);
     ctx->set_output(0, *output);
     

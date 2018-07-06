@@ -19,7 +19,7 @@ limitations under the License.
 
 #ifndef TENSORFLOW_RTGLIB_COMMON_HEADER_
 #include "common_headers.h"
-// #include "tensorflow/core/framework/op_kernel.h"
+
 #endif  // TENSORFLOW_RTGLIB_COMMON_HEADER_
 
 namespace tensorflow {
