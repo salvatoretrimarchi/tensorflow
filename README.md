@@ -4,4 +4,4 @@
 
 ## hipTensorflow:  the HIP Port of Tensorflow
 
-The project has been deprecated and be succeeded with [TensorFlow r1.8 ROCm port](https://github.com/ROCmSoftwarePlatform/tensorflow-upstream).
+The project has been deprecated and be succeeded with [TensorFlow r1.10 ROCm port](https://github.com/ROCmSoftwarePlatform/tensorflow-upstream).
